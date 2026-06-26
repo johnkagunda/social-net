@@ -1,6 +1,3 @@
-<<<<<<< HEAD
-//
-=======
 'use client';
 
 import { createContext, useContext, useState, useEffect } from 'react';
@@ -52,4 +49,3 @@ export function useAuth() {
   }
   return context;
 }
->>>>>>> kagunda

@@ -1,6 +1,3 @@
-<<<<<<< HEAD
-//
-=======
 const API_URL = 'http://localhost:8080/api';
 
 export async function register(userData) {
@@ -96,4 +93,4 @@ export async function updateProfilePrivacy(userId, isPrivate) {
 
   return response.json();
 }
->>>>>>> kagunda
+
