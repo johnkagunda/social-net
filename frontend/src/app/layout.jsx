@@ -1,5 +1,6 @@
-import { AuthProvider } from '@/context/AuthContext';
-import '@/styles/globals.css';
+import { AuthProvider } from '../context/AuthContext';
+import WebSocketProvider from '../components/WebSocketProvider';
+import '../styles/globals.css';
 
 export const metadata = {
   title: 'Social Network',
@@ -11,7 +12,9 @@ export default function RootLayout({ children }) {
     <html lang="en">
       <body>
         <AuthProvider>
-          {children}
+          <WebSocketProvider>
+            {children}
+          </WebSocketProvider>
         </AuthProvider>
       </body>
     </html>

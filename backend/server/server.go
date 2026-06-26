@@ -3,12 +3,16 @@ package server
 import (
 	"log"
 	"net/http"
-	"social/feature"
+
 	"social/pkg/handlers"
 	"social/queries/middleware"
+	"social/queries/websocket"
 
 	"github.com/gorilla/mux"
 )
+
+// WSHub is a global WebSocket hub accessible to other handlers
+var WSHub *websocket.Hub
 
 func NewServer() *http.Server {
 	router := mux.NewRouter()
@@ -16,34 +20,37 @@ func NewServer() *http.Server {
 	// Apply CORS middleware globally
 	router.Use(middleware.CORSMiddleware)
 
-	// --- Public routes ---
+	// Create and start WebSocket hub
+	WSHub = websocket.NewHub()
+	go WSHub.Run()
+
+	// WebSocket route (NOT protected by auth middleware - session token in URL)
+	router.HandleFunc("/api/ws", handlers.HandleWebSocketUpgrade(WSHub)).Methods("GET", "OPTIONS")
+
+	// Public routes
 	router.HandleFunc("/api/auth/register", handlers.Register).Methods("POST", "OPTIONS")
 	router.HandleFunc("/api/auth/login", handlers.Login).Methods("POST", "OPTIONS")
 
-	// --- Protected routes ---
+	// Protected routes
 	protected := router.PathPrefix("/api").Subrouter()
 	protected.Use(middleware.AuthMiddleware)
 
-	// Person 1 (auth + users)
 	protected.HandleFunc("/auth/logout", handlers.Logout).Methods("POST", "OPTIONS")
 	protected.HandleFunc("/auth/me", handlers.GetMe).Methods("GET", "OPTIONS")
+	protected.HandleFunc("/auth/session", handlers.GetSession).Methods("GET", "OPTIONS")
 	protected.HandleFunc("/users/{id}", handlers.GetUserProfile).Methods("GET", "OPTIONS")
 	protected.HandleFunc("/users/{id}/privacy", handlers.UpdateProfilePrivacy).Methods("PUT", "OPTIONS")
 
-	// Person 2 (posts + comments)
-	protected.HandleFunc("/posts", feature.GetFeedHandler).Methods("GET", "OPTIONS")
-	protected.HandleFunc("/posts", feature.CreatePostHandler).Methods("POST", "OPTIONS")
-	protected.HandleFunc("/users/{id}/posts", feature.GetUserPostsHandler).Methods("GET", "OPTIONS")
-	protected.HandleFunc("/posts/{id}/comments", feature.CreateCommentHandler).Methods("POST", "OPTIONS")
-	protected.HandleFunc("/posts/{id}/comments", feature.GetCommentsHandler).Methods("GET", "OPTIONS")
+	// Chat routes
+	protected.HandleFunc("/chat/users", handlers.GetDMEligibleUsers).Methods("GET", "OPTIONS")
+	protected.HandleFunc("/chat/{userId}", handlers.GetPrivateMessageHistory).Methods("GET", "OPTIONS")
+	protected.HandleFunc("/groups/{groupId}/messages", handlers.GetGroupMessageHistory).Methods("GET", "OPTIONS")
+	protected.HandleFunc("/user/groups", handlers.GetUserGroups).Methods("GET", "OPTIONS")
 
-	// Person 2 (followers)
-	protected.HandleFunc("/users/{id}/follow", feature.FollowUserHandler).Methods("POST", "OPTIONS")
-	protected.HandleFunc("/users/{id}/follow", feature.UnfollowHandler).Methods("DELETE", "OPTIONS")
-	protected.HandleFunc("/followers/{id}/accept", feature.AcceptFollowHandler).Methods("PUT", "OPTIONS")
-	protected.HandleFunc("/followers/{id}/decline", feature.DeclineFollowHandler).Methods("PUT", "OPTIONS")
-	protected.HandleFunc("/users/{id}/followers", feature.GetFollowersHandler).Methods("GET", "OPTIONS")
-	protected.HandleFunc("/users/{id}/following", feature.GetFollowingHandler).Methods("GET", "OPTIONS")
+	// Notification routes
+	protected.HandleFunc("/notifications", handlers.GetNotifications).Methods("GET", "OPTIONS")
+	protected.HandleFunc("/notifications/{notificationId}/read", handlers.MarkNotificationAsRead).Methods("PUT", "OPTIONS")
+	protected.HandleFunc("/notifications/read-all", handlers.MarkAllNotificationsAsRead).Methods("PUT", "OPTIONS")
 
 	server := &http.Server{
 		Addr:    ":8080",
