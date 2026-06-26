@@ -1,45 +1,88 @@
-<<<<<<< HEAD
-//
-=======
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
-import { useAuth } from '@/context/AuthContext';
-import { getUserProfile, updateProfilePrivacy } from '@/lib/auth';
+import { useState, useEffect, useCallback } from "react";
+import { useParams } from "next/navigation";
+import { useAuth } from "@/context/AuthContext";
+import { getUserProfile, updateProfilePrivacy } from "@/lib/auth";
+import { getUserPosts } from "@/lib/posts";
+import { getFollowers, getFollowing, followUser, unfollowUser, acceptFollow, declineFollow } from "@/lib/followers";
+import PostCard from "@/components/PostCard";
 
 export default function ProfilePage() {
-  const { id } = useParams();
-  const { user } = useAuth();
-  const [profile, setProfile] = useState(null);
+  const { id: profileId } = useParams();
+  const { user: currentUser } = useAuth();
+  const isOwnProfile = currentUser && currentUser.id === profileId;
+
+  const [profileUser, setProfileUser] = useState(null);
+  const [posts, setPosts] = useState([]);
+  const [followers, setFollowers] = useState([]);
+  const [following, setFollowing] = useState([]);
+  const [pendingRequests, setPendingRequests] = useState([]);
+  const [isFollowing, setIsFollowing] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [updatingPrivacy, setUpdatingPrivacy] = useState(false);
 
-  const isOwnProfile = user && user.id === id;
-
-  useEffect(() => {
-    loadProfile();
-  }, [id]);
-
-  const loadProfile = async () => {
+  const fetchData = useCallback(async () => {
+    setLoading(true);
     try {
-      const data = await getUserProfile(id);
-      setProfile(data);
+      const [userData, postsData, followersData, followingData] = await Promise.all([
+        getUserProfile(profileId),
+        getUserPosts(profileId),
+        getFollowers(profileId),
+        getFollowing(profileId),
+      ]);
+
+      setProfileUser(userData);
+      setPosts(postsData || []);
+      setFollowers(followersData?.filter((f) => f.status === "accepted") || []);
+      setFollowing(followingData || []);
+
+      if (isOwnProfile) {
+        setPendingRequests(followersData?.filter((f) => f.status === "pending") || []);
+      }
+
+      if (currentUser && !isOwnProfile) {
+        const myFollowing = await getFollowing(currentUser.id);
+        setIsFollowing(!!myFollowing?.find((f) => f.following_id === profileId));
+      }
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
+  }, [profileId, currentUser, isOwnProfile]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const handleFollowToggle = async () => {
+    try {
+      if (isFollowing) await unfollowUser(profileId);
+      else await followUser(profileId);
+      fetchData();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleRequest = async (requestId, action) => {
+    try {
+      if (action === "accept") await acceptFollow(requestId);
+      else await declineFollow(requestId);
+      fetchData();
+    } catch (err) {
+      setError(err.message);
+    }
   };
 
   const handlePrivacyToggle = async () => {
     if (!isOwnProfile) return;
-
     setUpdatingPrivacy(true);
     try {
-      await updateProfilePrivacy(id, !profile.is_private);
-      setProfile(prev => ({ ...prev, is_private: !prev.is_private }));
+      await updateProfilePrivacy(profileId, !profileUser.is_private);
+      setProfileUser((prev) => ({ ...prev, is_private: !prev.is_private }));
     } catch (err) {
       setError(err.message);
     } finally {
@@ -48,114 +91,130 @@ export default function ProfilePage() {
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-xl">Loading profile...</div>
-      </div>
-    );
+    return <div className="container" style={{ textAlign: "center" }}><p>Loading profile...</p></div>;
   }
 
   if (error) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-xl text-red-500">{error}</div>
-      </div>
-    );
+    return <div className="container" style={{ textAlign: "center" }}><p style={{ color: "#dc2626" }}>{error}</p></div>;
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 py-8">
-      <div className="container mx-auto px-4 max-w-4xl">
-        <div className="bg-white rounded-lg shadow-md p-6">
-          {/* Profile Header */}
-          <div className="flex items-start gap-6 mb-6">
-            <div className="w-24 h-24 rounded-full bg-gray-300 flex items-center justify-center overflow-hidden">
-              {profile.avatar ? (
-                <img src={profile.avatar} alt="Avatar" className="w-full h-full object-cover" />
-              ) : (
-                <span className="text-3xl text-gray-600">
-                  {profile.first_name?.[0]}{profile.last_name?.[0]}
-                </span>
-              )}
-            </div>
-
-            <div className="flex-1">
-              <h1 className="text-3xl font-bold mb-2">
-                {profile.first_name} {profile.last_name}
-              </h1>
-              {profile.nickname && (
-                <p className="text-gray-600 mb-2">@{profile.nickname}</p>
-              )}
-              {profile.about_me && (
-                <p className="text-gray-700 mb-4">{profile.about_me}</p>
-              )}
-
-              {isOwnProfile && (
-                <div className="flex items-center gap-4">
-                  <button
-                    onClick={handlePrivacyToggle}
-                    disabled={updatingPrivacy}
-                    className={`px-4 py-2 rounded-lg ${
-                      profile.is_private
-                        ? 'bg-yellow-500 hover:bg-yellow-600'
-                        : 'bg-green-500 hover:bg-green-600'
-                    } text-white disabled:bg-gray-400`}
-                  >
-                    {updatingPrivacy
-                      ? 'Updating...'
-                      : profile.is_private
-                      ? '🔒 Private Profile'
-                      : '🌍 Public Profile'}
-                  </button>
-                </div>
-              )}
-
-              {!isOwnProfile && profile.is_private && (
-                <div className="text-yellow-600">
-                  🔒 This is a private profile
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* User Information */}
-          {profile.email && (
-            <div className="border-t pt-6">
-              <h2 className="text-xl font-bold mb-4">Information</h2>
-              <div className="space-y-2">
-                <div>
-                  <span className="font-semibold">Email:</span> {profile.email}
-                </div>
-                {profile.date_of_birth && (
-                  <div>
-                    <span className="font-semibold">Date of Birth:</span> {profile.date_of_birth}
-                  </div>
-                )}
-              </div>
-            </div>
+    <div className="container">
+      <div className="card" style={{ padding: "40px", textAlign: "center", marginBottom: "24px" }}>
+        <div style={{
+          width: "120px", height: "120px", borderRadius: "50%", background: "#ddd",
+          margin: "0 auto 16px", overflow: "hidden",
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          {profileUser?.avatar ? (
+            <img src={profileUser.avatar} alt="avatar" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          ) : (
+            <span style={{ fontSize: "32px", color: "#6b7280" }}>
+              {profileUser?.first_name?.[0]}{profileUser?.last_name?.[0]}
+            </span>
           )}
+        </div>
+        <h1 style={{ fontSize: "28px", fontWeight: "700" }}>
+          {profileUser ? `${profileUser.first_name} ${profileUser.last_name}` : "Unknown User"}
+        </h1>
+        {profileUser?.nickname && <p style={{ color: "var(--text-secondary)", marginTop: "4px" }}>@{profileUser.nickname}</p>}
+        {profileUser?.about_me && <p style={{ marginTop: "8px", fontSize: "14px" }}>{profileUser.about_me}</p>}
 
-          {/* Posts Section */}
-          <div className="border-t pt-6 mt-6">
-            <h2 className="text-xl font-bold mb-4">Posts</h2>
-            <p className="text-gray-500">No posts yet</p>
+        {isOwnProfile && (
+          <div style={{ marginTop: "16px" }}>
+            <button
+              onClick={handlePrivacyToggle}
+              disabled={updatingPrivacy}
+              className={profileUser?.is_private ? "btn-secondary" : "btn-primary"}
+              style={{ minWidth: "140px" }}
+            >
+              {updatingPrivacy
+                ? "Updating..."
+                : profileUser?.is_private
+                ? "🔒 Private Profile"
+                : "🌍 Public Profile"}
+            </button>
           </div>
+        )}
 
-          {/* Followers Section */}
-          <div className="border-t pt-6 mt-6">
-            <h2 className="text-xl font-bold mb-4">Followers & Following</h2>
-            <div className="flex gap-8">
-              <div>
-                <span className="font-semibold">Followers:</span> 0
-              </div>
-              <div>
-                <span className="font-semibold">Following:</span> 0
-              </div>
-            </div>
+        {!isOwnProfile && profileUser?.is_private && (
+          <p style={{ color: "#b45309", marginTop: "8px", fontSize: "14px" }}>🔒 This is a private profile</p>
+        )}
+
+        {!isOwnProfile && currentUser && (
+          <div style={{ marginTop: "16px" }}>
+            <button onClick={handleFollowToggle} className={isFollowing ? "btn-secondary" : "btn-primary"} style={{ minWidth: "120px" }}>
+              {isFollowing ? "Following" : "Follow"}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {profileUser?.email && (
+        <div className="card" style={{ marginBottom: "24px" }}>
+          <h2 style={{ fontSize: "16px", fontWeight: "600", marginBottom: "12px" }}>Information</h2>
+          <div style={{ fontSize: "14px" }}>
+            <div><span style={{ fontWeight: "600" }}>Email:</span> {profileUser.email}</div>
+            {profileUser.date_of_birth && (
+              <div><span style={{ fontWeight: "600" }}>Date of Birth:</span> {profileUser.date_of_birth}</div>
+            )}
           </div>
         </div>
+      )}
+
+      {isOwnProfile && pendingRequests.length > 0 && (
+        <div className="card" style={{ border: "1px solid #0866ff", background: "#f0f7ff", marginBottom: "24px" }}>
+          <h2 style={{ fontSize: "16px", fontWeight: "600", marginBottom: "12px" }}>Follow Requests</h2>
+          {pendingRequests.map((req) => (
+            <div key={req.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: "#ddd" }} />
+                <span style={{ fontSize: "14px", fontWeight: "600" }}>User {req.follower_id}</span>
+              </div>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <button onClick={() => handleRequest(req.id, "accept")} className="btn-primary" style={{ padding: "4px 12px", fontSize: "13px" }}>Confirm</button>
+                <button onClick={() => handleRequest(req.id, "decline")} className="btn-secondary" style={{ padding: "4px 12px", fontSize: "13px" }}>Delete</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "24px" }}>
+        <div className="card">
+          <h3 style={{ fontSize: "16px", fontWeight: "600", marginBottom: "12px" }}>Followers ({followers.length})</h3>
+          {followers.length === 0
+            ? <p style={{ fontSize: "14px", color: "var(--text-secondary)" }}>No followers yet.</p>
+            : followers.map((f) => (
+              <div key={f.id} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 0" }}>
+                <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: "#ddd" }} />
+                <span style={{ fontSize: "14px" }}>User {f.follower_id}</span>
+              </div>
+            ))
+          }
+        </div>
+
+        <div className="card">
+          <h3 style={{ fontSize: "16px", fontWeight: "600", marginBottom: "12px" }}>Following ({following.length})</h3>
+          {following.length === 0
+            ? <p style={{ fontSize: "14px", color: "var(--text-secondary)" }}>Not following anyone yet.</p>
+            : following.map((f) => (
+              <div key={f.id} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 0" }}>
+                <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: "#ddd" }} />
+                <span style={{ fontSize: "14px" }}>User {f.following_id}</span>
+              </div>
+            ))
+          }
+        </div>
+      </div>
+
+      <div>
+        <h2 style={{ fontSize: "18px", fontWeight: "700", marginBottom: "16px" }}>Posts</h2>
+        {posts.length === 0
+          ? <div className="card" style={{ textAlign: "center", padding: "32px" }}><p style={{ color: "var(--text-secondary)" }}>No posts yet.</p></div>
+          : posts.map((post) => <PostCard key={post.id} post={post} />)
+        }
       </div>
     </div>
   );
 }
->>>>>>> kagunda
