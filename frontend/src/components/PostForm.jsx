@@ -105,19 +105,23 @@ export default function PostForm({ onPostCreated }) {
                 {loadingFollowers ? (
                   <p style={{ fontSize: "12px" }}>Loading followers...</p>
                 ) : (
-                  <div style={{ maxHeight: "120px", overflowY: "auto", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
-                    {followers.map((f) => (
-                      <label key={f.id} style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", cursor: "pointer" }}>
-                        <input
-                          type="checkbox"
-                          checked={selectedViewers.includes(f.follower_id)}
-                          onChange={() => handleViewerToggle(f.follower_id)}
-                        />
+                  <select
+                    multiple
+                    value={selectedViewers}
+                    onChange={(e) => {
+                      const options = [...e.target.selectedOptions];
+                      const values = options.map(option => option.value);
+                      setSelectedViewers(values);
+                    }}
+                    style={{ width: "100%", padding: "8px", borderRadius: "6px", border: "1px solid var(--border-color)", background: "#fff", minHeight: "80px" }}
+                  >
+                    {followers.map(f => (
+                      <option key={f.id} value={f.follower_id} style={{ padding: "4px" }}>
                         User {f.follower_id}
-                      </label>
+                      </option>
                     ))}
-                    {followers.length === 0 && <p style={{ fontSize: "12px" }}>No followers found.</p>}
-                  </div>
+                    {followers.length === 0 && <option disabled value="">No followers found.</option>}
+                  </select>
                 )}
               </div>
             )}
