@@ -40,6 +40,14 @@ func GetFeed(db *sql.DB, userID string) ([]models.Post, error) {
 		if err := rows.Scan(&p.ID, &p.UserID, &p.Content, &p.Privacy, &p.ImagePath, &p.CreatedAt, &p.AuthorName, &p.AuthorAvatar, &p.CommentCount); err != nil {
 			return nil, err
 		}
+		
+		// Fetch reactions for this post
+		reactions, err := GetReactionsByPostID(db, p.ID)
+		if err != nil {
+			return nil, err
+		}
+		p.Reactions = reactions
+		
 		posts = append(posts, p)
 	}
 	return posts, nil
@@ -104,6 +112,14 @@ func GetPostsByUserID(db *sql.DB, targetUserID string, viewerID string) ([]model
 		if err := rows.Scan(&p.ID, &p.UserID, &p.Content, &p.Privacy, &p.ImagePath, &p.CreatedAt, &p.AuthorName, &p.AuthorAvatar, &p.CommentCount); err != nil {
 			return nil, err
 		}
+		
+		// Fetch reactions for this post
+		reactions, err := GetReactionsByPostID(db, p.ID)
+		if err != nil {
+			return nil, err
+		}
+		p.Reactions = reactions
+		
 		posts = append(posts, p)
 	}
 	return posts, nil
@@ -132,6 +148,14 @@ func GetPostsByGroupID(db *sql.DB, groupID string, userID string) ([]models.Post
 		if err := rows.Scan(&p.ID, &p.UserID, &p.Content, &p.Privacy, &p.ImagePath, &p.CreatedAt, &p.AuthorName, &p.AuthorAvatar, &p.CommentCount); err != nil {
 			return nil, err
 		}
+		
+		// Fetch reactions for this post
+		reactions, err := GetReactionsByPostID(db, p.ID)
+		if err != nil {
+			return nil, err
+		}
+		p.Reactions = reactions
+		
 		posts = append(posts, p)
 	}
 	return posts, nil
@@ -231,4 +255,42 @@ func ToggleReaction(db *sql.DB, postID string, userID string, emoji string) erro
 	}
 
 	return err
+}
+
+// GetReactionsByPostID retrieves all reactions for a specific post
+func GetReactionsByPostID(db *sql.DB, postID int64) ([]models.Reaction, error) {
+	rows, err := db.Query(`SELECT id, post_id, user_id, emoji, created_at FROM post_reactions WHERE post_id = ? ORDER BY created_at ASC`, postID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var reactions []models.Reaction
+	for rows.Next() {
+		var r models.Reaction
+		if err := rows.Scan(&r.ID, &r.PostID, &r.UserID, &r.Emoji, &r.CreatedAt); err != nil {
+			return nil, err
+		}
+		reactions = append(reactions, r)
+	}
+	return reactions, nil
+}
+
+// GetReactionsByPostIDStr is like GetReactionsByPostID but accepts a string post ID
+func GetReactionsByPostIDStr(db *sql.DB, postID string) ([]models.Reaction, error) {
+	rows, err := db.Query(`SELECT id, post_id, user_id, emoji, created_at FROM post_reactions WHERE post_id = ? ORDER BY created_at ASC`, postID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var reactions []models.Reaction
+	for rows.Next() {
+		var r models.Reaction
+		if err := rows.Scan(&r.ID, &r.PostID, &r.UserID, &r.Emoji, &r.CreatedAt); err != nil {
+			return nil, err
+		}
+		reactions = append(reactions, r)
+	}
+	return reactions, nil
 }

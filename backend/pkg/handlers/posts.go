@@ -6,32 +6,46 @@ import (
 	"social/models"
 	"social/pkg/db/sqlite"
 	"social/queries"
-	"strings"
+	"social/queries/middleware"
 )
 
 // ReactToPost handles adding or removing an emoji reaction to a post
 func ReactToPost(w http.ResponseWriter, r *http.Request) {
-	pathParts := strings.Split(r.URL.Path, "/")
-	postID := pathParts[len(pathParts)-2] // e.g., /api/posts/{id}/react
+	postID := r.PathValue("id")
+	if postID == "" {
+		http.Error(w, `{"error":"missing post id"}`, http.StatusBadRequest)
+		return
+	}
 
-	userID, ok := r.Context().Value("userID").(string)
-	if !ok {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+	userID := middleware.GetUserID(r.Context())
+	if userID == "" {
+		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 		return
 	}
 
 	var req models.ReactionRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Emoji == "" {
+		http.Error(w, `{"error":"invalid request"}`, http.StatusBadRequest)
 		return
 	}
 
-	err := queries.ToggleReaction(sqlite.DB, postID, userID, req.Emoji)
+	if err := queries.ToggleReaction(sqlite.DB, postID, userID, req.Emoji); err != nil {
+		http.Error(w, `{"error":"failed to process reaction"}`, http.StatusInternalServerError)
+		return
+	}
+
+	// Return the updated reaction count for this post
+	reactions, err := queries.GetReactionsByPostIDStr(sqlite.DB, postID)
 	if err != nil {
-		http.Error(w, "Failed to process reaction", http.StatusInternalServerError)
+		http.Error(w, `{"error":"failed to fetch reactions"}`, http.StatusInternalServerError)
 		return
 	}
+	if reactions == nil {
+		reactions = []models.Reaction{}
+	}
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"message": "Reaction updated successfully"})
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"reactions": reactions,
+	})
 }

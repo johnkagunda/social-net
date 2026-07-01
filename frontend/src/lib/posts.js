@@ -68,9 +68,8 @@ export const reactToPost = async (postId, emoji) => {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      // Include your authorization token here if required by middleware
-      "Authorization": `Bearer ${localStorage.getItem("token")}` 
     },
+    credentials: "include",
     body: JSON.stringify({ emoji }),
   });
 

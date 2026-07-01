@@ -89,11 +89,14 @@ func Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := models.CreateUser(sqlite.DB, user, req.Password); err != nil {
+		w.Header().Set("Content-Type", "application/json")
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
-			http.Error(w, `{"error":"Email already registered"}`, http.StatusConflict)
+			w.WriteHeader(http.StatusConflict)
+			w.Write([]byte(`{"error":"Email already registered"}`))
 			return
 		}
-		http.Error(w, `{"error":"Failed to create user"}`, http.StatusBadRequest)
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error":"Failed to create user"}`))
 		return
 	}
 
@@ -111,12 +114,16 @@ func Login(w http.ResponseWriter, r *http.Request) {
 
 	user, err := models.GetUserByEmail(sqlite.DB, req.Email)
 	if err != nil {
-		http.Error(w, `{"error":"Invalid credentials"}`, http.StatusUnauthorized)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte(`{"error":"Invalid credentials"}`))
 		return
 	}
 
 	if err := models.VerifyPassword(user.PasswordHash, req.Password); err != nil {
-		http.Error(w, `{"error":"Invalid credentials"}`, http.StatusUnauthorized)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte(`{"error":"Invalid credentials"}`))
 		return
 	}
 

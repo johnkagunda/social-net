@@ -7,12 +7,17 @@ export async function register(userData) {
     headers: isFormData ? undefined : {
       'Content-Type': 'application/json',
     },
+    credentials: 'include',
     body: isFormData ? userData : JSON.stringify(userData),
   });
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || 'Registration failed');
+    let message = 'Registration failed';
+    try {
+      const error = await response.json();
+      message = error.error || message;
+    } catch {}
+    throw new Error(message);
   }
 
   return response.json();
@@ -29,8 +34,12 @@ export async function login(email, password) {
   });
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || 'Login failed');
+    let message = 'Login failed';
+    try {
+      const error = await response.json();
+      message = error.error || message;
+    } catch {}
+    throw new Error(message);
   }
 
   return response.json();
@@ -55,10 +64,7 @@ export async function getMe() {
   });
 
   if (!response.ok) {
-    if (response.status === 401) {
-      return null;
-    }
-    throw new Error('Failed to get user');
+    return null;
   }
 
   return response.json();

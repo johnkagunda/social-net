@@ -8,12 +8,12 @@ import (
 	"social/pkg/sqllite"
 	"social/server"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 func main() {
 	// Initialize database
-	db, err := sql.Open("sqlite3", "./social_network.db")
+	db, err := sql.Open("sqlite", "./social_network.db")
 	if err != nil {
 		log.Fatalf("failed to open database: %v", err)
 	}

@@ -20,10 +20,14 @@ export function AuthProvider({ children }) {
     try {
       const userData = await getMe();
       setUser(userData);
-      // Get session token for WebSocket
-      const sessionData = await getSession();
-      if (sessionData && sessionData.session_id) {
-        setSessionToken(sessionData.session_id);
+      if (userData) {
+        // Get session token for WebSocket - non-fatal
+        try {
+          const sessionData = await getSession();
+          if (sessionData && sessionData.session_id) {
+            setSessionToken(sessionData.session_id);
+          }
+        } catch (e) {}
       }
     } catch (error) {
       setUser(null);
@@ -36,10 +40,14 @@ export function AuthProvider({ children }) {
   const login = async (email, password) => {
     const userData = await loginApi(email, password);
     setUser(userData);
-    // Get session token for WebSocket after login
-    const sessionData = await getSession();
-    if (sessionData && sessionData.session_id) {
-      setSessionToken(sessionData.session_id);
+    // Get session token for WebSocket after login - non-fatal if it fails
+    try {
+      const sessionData = await getSession();
+      if (sessionData && sessionData.session_id) {
+        setSessionToken(sessionData.session_id);
+      }
+    } catch (e) {
+      // WebSocket session is optional - login still succeeds
     }
     return userData;
   };

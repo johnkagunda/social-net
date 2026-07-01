@@ -1,13 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { getComments, createComment, updatePost, deletePost } from "@/lib/posts";
+import { getComments, createComment, updatePost, deletePost, reactToPost } from "@/lib/posts";
 import { getUserProfile } from "@/lib/auth";
 import { getFollowing, followUser, unfollowUser } from "@/lib/followers";
 import { useAuth } from "@/context/AuthContext";
-import { reactToPost } from "@/lib/posts"; 
-import EmojiPicker from "./EmojiPicker";
 
 export default function PostCard({ post }) {
   const { user: currentUser } = useAuth();
@@ -28,22 +26,26 @@ export default function PostCard({ post }) {
 
   const [showPicker, setShowPicker] = useState(false);
   const [reactions, setReactions] = useState(post.reactions || []);
+  const pickerRef = useRef(null);
+
+  // Close picker when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (pickerRef.current && !pickerRef.current.contains(e.target)) {
+        setShowPicker(false);
+      }
+    };
+    if (showPicker) document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showPicker]);
+
+  const QUICK_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "😡"];
 
   const handleReact = async (emoji) => {
     try {
-      await reactToPost(post.id, emoji);
-      const existingReactionIndex = reactions.findIndex(r => r.user_id === currentUser?.id);
-      let updatedReactions = [...reactions];
-      if (existingReactionIndex !== -1) {
-        if (updatedReactions[existingReactionIndex].emoji === emoji) {
-          updatedReactions.splice(existingReactionIndex, 1);
-        } else {
-          updatedReactions[existingReactionIndex].emoji = emoji;
-        }
-      } else {
-        updatedReactions.push({ user_id: currentUser?.id, emoji: emoji });
-      }
-      setReactions(updatedReactions);
+      const data = await reactToPost(post.id, emoji);
+      // Use the authoritative list from the server
+      setReactions(data.reactions || []);
       setShowPicker(false);
     } catch (error) {
       console.error("Error reacting to post:", error);
@@ -54,6 +56,9 @@ export default function PostCard({ post }) {
     acc[curr.emoji] = (acc[curr.emoji] || 0) + 1;
     return acc;
   }, {});
+
+  const totalReactions = reactions.length;
+  const userReaction = reactions.find(r => r.user_id === currentUser?.id);
 
   useEffect(() => {
     if (currentUser && currentUser.id !== post.user_id) {
@@ -276,27 +281,60 @@ export default function PostCard({ post }) {
     <div style={{ display: "flex", gap: "8px", borderTop: "1px solid var(--border-color)", paddingTop: "8px", marginTop: "4px" }}>
 
       {/* React button + picker */}
-      <div style={{ position: "relative" }}>
+      <div ref={pickerRef} style={{ position: "relative", flex: 1 }}>
         <button
           onClick={() => setShowPicker(!showPicker)}
           className="btn-secondary"
-          style={{ background: "transparent", color: "var(--text-secondary)" }}
+          style={{
+            background: userReaction ? "#dbeafe" : "transparent",
+            color: userReaction ? "#2563eb" : "var(--text-secondary)",
+            width: "100%",
+            fontWeight: userReaction ? "600" : "400",
+          }}
         >
-          🎃React🎃
+          {userReaction ? userReaction.emoji : "👍"} React {totalReactions > 0 && `· ${totalReactions}`}
         </button>
 
         {showPicker && (
           <div style={{
             position: "absolute",
-            bottom: "36px",
+            bottom: "42px",
             left: "0",
-            zIndex: 10,
+            zIndex: 50,
             background: "white",
-            boxShadow: "0 4px 6px rgba(0,0,0,0.1)",
-            borderRadius: "8px",
+            boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+            borderRadius: "24px",
             border: "1px solid #e5e7eb",
+            padding: "6px 8px",
+            display: "flex",
+            gap: "4px",
           }}>
-            <EmojiPicker onSelect={handleReact} />
+            {QUICK_EMOJIS.map((emoji) => (
+              <button
+                key={emoji}
+                onClick={() => handleReact(emoji)}
+                style={{
+                  fontSize: "22px",
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  borderRadius: "50%",
+                  width: "38px",
+                  height: "38px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  transition: "transform 0.1s",
+                  transform: userReaction?.emoji === emoji ? "scale(1.3)" : "scale(1)",
+                  background: userReaction?.emoji === emoji ? "#dbeafe" : "transparent",
+                }}
+                onMouseEnter={e => e.currentTarget.style.transform = "scale(1.3)"}
+                onMouseLeave={e => e.currentTarget.style.transform = userReaction?.emoji === emoji ? "scale(1.3)" : "scale(1)"}
+                title={emoji}
+              >
+                {emoji}
+              </button>
+            ))}
           </div>
         )}
       </div>
@@ -311,31 +349,33 @@ export default function PostCard({ post }) {
       </button>
     </div>
 
-    {/* Reaction pills — only rendered when there are reactions */}
+    {/* Reaction breakdown pills */}
     {Object.keys(reactionCounts).length > 0 && (
       <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "8px" }}>
-        {Object.entries(reactionCounts).map(([emoji, count]) => (
-          <button
-            key={emoji}
-            onClick={() => handleReact(emoji)}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "4px",
-              background: reactions.some(r => r.user_id === currentUser?.id && r.emoji === emoji)
-                ? "#dbeafe"
-                : "#f3f4f6",
-              padding: "2px 8px",
-              borderRadius: "9999px",
-              fontSize: "13px",
-              border: "1px solid #e5e7eb",
-              cursor: "pointer",
-            }}
-          >
-            {emoji}
-            <span style={{ color: "#4b5563" }}>{count}</span>
-          </button>
-        ))}
+        {Object.entries(reactionCounts).map(([emoji, count]) => {
+          const isMyReaction = userReaction?.emoji === emoji;
+          return (
+            <button
+              key={emoji}
+              onClick={() => handleReact(emoji)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "4px",
+                background: isMyReaction ? "#dbeafe" : "#f3f4f6",
+                padding: "3px 10px",
+                borderRadius: "9999px",
+                fontSize: "14px",
+                border: isMyReaction ? "1px solid #3b82f6" : "1px solid #e5e7eb",
+                cursor: "pointer",
+                fontWeight: isMyReaction ? "600" : "400",
+                color: isMyReaction ? "#2563eb" : "#4b5563",
+              }}
+            >
+              {emoji} <span>{count}</span>
+            </button>
+          );
+        })}
       </div>
     )}
 
